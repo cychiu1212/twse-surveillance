@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>台股處置雷達｜注意股・處置股・出關倒數</title>
+<meta name="description" content="台股上市櫃注意股與處置股查詢:處置月曆、出關倒數、分盤限制、注意累計次數與處置風險試算。資料來源 TWSE/TPEx 公開 OpenAPI。">
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --ink:#191a1f; --ink2:#585a66; --ink3:#8b8d99;
+  --line:#e3e5ea; --accent:#2563eb; --accent-bg:#eaf0fd;
+  --good:#1a7f37; --good-bg:#e6f4ea;
+  --warn:#9a6700; --warn-bg:#fff4d5;
+  --serious:#bc4c00; --serious-bg:#ffe8d7;
+  --critical:#c0362c; --critical-bg:#fdebe9;
+  --chip5:#0969da; --chip5-bg:#ddf4ff;
+  --chip20:#bc4c00; --chip20-bg:#ffe8d7;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#121317; --surface:#1c1d23; --ink:#ebecf1; --ink2:#a4a6b3; --ink3:#767884;
+    --line:#2d2e36; --accent:#7ca7f7; --accent-bg:#1d2839;
+    --good:#57ab5a; --good-bg:#122117;
+    --warn:#c69026; --warn-bg:#2a2214;
+    --serious:#e0823d; --serious-bg:#2b1d12;
+    --critical:#e5534b; --critical-bg:#2d1615;
+    --chip5:#6cb6ff; --chip5-bg:#122a41;
+    --chip20:#e0823d; --chip20-bg:#2b1d12;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);
+  font-family:"Segoe UI","Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
+  font-size:15px;line-height:1.6}
+.wrap{max-width:1060px;margin:0 auto;padding:18px 14px 70px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h1{font-size:1.3rem;font-weight:700}
+#updated{color:var(--ink3);font-size:.8rem}
+.disclaimer{color:var(--ink3);font-size:.78rem;margin:4px 0 14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 15px}
+.tile .n{font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+.tile .t{color:var(--ink2);font-size:.8rem}
+nav.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);z-index:5;padding-top:4px}
+nav.tabs button{border:none;background:none;color:var(--ink2);padding:9px 14px;cursor:pointer;font-size:.93rem;border-bottom:2px solid transparent;white-space:nowrap}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:650}
+section{display:none}section.on{display:block}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 17px;margin-bottom:12px}
+.badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 10px;font-size:.76rem;font-weight:650;white-space:nowrap}
+.b-critical{background:var(--critical-bg);color:var(--critical)}
+.b-serious{background:var(--serious-bg);color:var(--serious)}
+.b-warn{background:var(--warn-bg);color:var(--warn)}
+.b-good{background:var(--good-bg);color:var(--good)}
+.b-5{background:var(--chip5-bg);color:var(--chip5)}
+.b-20{background:var(--chip20-bg);color:var(--chip20)}
+.b-mkt{background:var(--accent-bg);color:var(--accent)}
+/* 月曆 */
+.calhead{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.calhead h2{font-size:1.05rem}
+.calhead button{border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:8px;padding:4px 12px;cursor:pointer}
+.calhead .sum{color:var(--ink2);font-size:.82rem;margin-left:auto}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.calgrid .dow{color:var(--ink3);font-size:.75rem;text-align:center;padding:4px 0}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:8px;height:118px;padding:4px 6px;font-size:.78rem;overflow-y:auto;scrollbar-width:thin}
+.day.dim{opacity:.38}
+.day.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.day .dn{color:var(--ink3);font-size:.72rem}
+.day .chip{display:block;margin-top:2px;border-radius:5px;padding:1px 5px;cursor:pointer;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem}
+.chip.c5{background:var(--chip5-bg);color:var(--chip5)}
+.chip.c20{background:var(--chip20-bg);color:var(--chip20)}
+/* 篩選列 */
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.filters button{border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:999px;padding:4px 13px;cursor:pointer;font-size:.83rem}
+.filters button.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:650}
+.filters input{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 14px;font-size:.85rem;width:180px}
+/* 處置卡片 */
+.datehdr{color:var(--ink2);font-size:.85rem;font-weight:650;margin:16px 0 8px}
+.dcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 16px;margin-bottom:10px}
+.dcard .row1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dcard .nm{font-size:1.02rem;font-weight:700}
+.dcard .cd{color:var(--ink3);font-variant-numeric:tabular-nums}
+.dcard .period{color:var(--ink2);font-size:.85rem;margin-top:3px}
+.dcard .reason{color:var(--ink2);font-size:.85rem;margin-top:3px}
+.dcard details{margin-top:6px}
+.dcard summary{color:var(--accent);font-size:.8rem;cursor:pointer}
+.dcard .full{color:var(--ink2);font-size:.82rem;margin-top:6px;overflow-wrap:anywhere}
+/* 注意股表 */
+table{width:100%;border-collapse:collapse}
+th{color:var(--ink3);font-size:.76rem;font-weight:600;text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr.rowlink{cursor:pointer}
+tr.rowlink:hover td{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.code{font-variant-numeric:tabular-nums;font-weight:650}
+.crit-text{color:var(--ink2);font-size:.84rem}
+.bufline{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:.85rem;color:var(--ink2)}
+.bufbar{height:8px;border-radius:4px;background:var(--line);flex:0 0 150px;overflow:hidden}
+.bufbar i{display:block;height:100%;border-radius:4px}
+.searchbar{display:flex;gap:8px;margin-bottom:14px}
+.searchbar input{flex:0 1 250px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:.95rem}
+.searchbar button{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;padding:8px 18px;cursor:pointer}
+.kv{margin:5px 0 0;color:var(--ink2);font-size:.88rem}
+.kv b{color:var(--ink)}
+.empty{color:var(--ink3);padding:22px;text-align:center}
+h2{font-size:1.02rem;font-weight:650;margin-bottom:10px}
+h3{font-size:.92rem;font-weight:650;margin:13px 0 5px}
+.rules p,.rules li{color:var(--ink2);font-size:.89rem;margin-bottom:5px}
+.rules b{color:var(--ink)}
+.rules ul{padding-left:20px}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 14px;font-size:.84rem;margin-top:13px}
+footer{color:var(--ink3);font-size:.76rem;margin-top:30px;text-align:center}
+/* 個股時間軸 */
+.tags{color:var(--warn);font-size:.85rem;font-weight:650}
+.tl{position:relative;margin-top:10px}
+.tl-row{display:grid;grid-template-columns:108px 1fr;gap:14px;position:relative;padding-bottom:14px}
+.tl-row::before{content:'';position:absolute;left:96px;top:8px;bottom:-6px;width:2px;background:var(--line)}
+.tl-row:last-child::before{bottom:auto;height:14px}
+.tl-row::after{content:'';position:absolute;left:91.5px;top:6px;width:11px;height:11px;border-radius:50%;background:var(--warn);border:2px solid var(--surface)}
+.tl-date{font-weight:650;font-size:.9rem;text-align:right;padding-right:22px;padding-top:1px;white-space:nowrap}
+.tl-card{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 14px}
+.tl-card .crit-text{margin-top:5px}
+.mini{font-size:.8rem;color:var(--ink2);border-collapse:collapse;margin-top:6px}
+.mini td,.mini th{padding:3px 9px;border-bottom:1px solid var(--line)}
+.anal{background:var(--accent-bg);border-radius:10px;padding:12px 15px;margin-top:10px}
+.anal p{margin:3px 0;font-size:.9rem;color:var(--ink2)}
+.anal b{color:var(--ink)}
+.anal .hl{color:var(--critical);font-weight:700}
+@media (max-width:640px){ .tl-row{grid-template-columns:86px 1fr} .tl-row::before{left:76px} .tl-row::after{left:71.5px} .tl-date{padding-right:20px;font-size:.8rem} }
+@media (max-width:640px){ .bufbar{flex-basis:100px} .day{min-height:58px} }
+</style>
+</head>
+<body>
+<div id="pwgate" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:30px 34px;max-width:340px;text-align:center">
+    <div style="font-size:2rem">📡</div>
+    <h2 style="margin:8px 0 4px">台股處置雷達</h2>
+    <p style="color:var(--ink3);font-size:.85rem;margin-bottom:14px">本站內容需要密碼</p>
+    <input id="pw-in" type="password" placeholder="輸入密碼" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 12px;font-size:1rem">
+    <button id="pw-go" style="width:100%;margin-top:10px;border:none;background:var(--accent);color:#fff;border-radius:8px;padding:9px;font-size:.95rem;cursor:pointer">進入</button>
+    <p id="pw-err" style="color:var(--critical);font-size:.82rem;margin-top:8px;display:none">密碼錯誤,請再試一次</p>
+  </div>
+</div>
+<div class="wrap">
+<header>
+  <h1>📡 台股處置雷達</h1>
+  <span id="updated"></span>
+  <input id="gq" list="allstocks" placeholder="🔍 代號 / 名稱" style="margin-left:auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 14px;font-size:.88rem;width:170px">
+  <datalist id="allstocks"></datalist>
+</header>
+<p class="disclaimer">資料來源:TWSE / TPEx 公開 OpenAPI,每交易日收盤後自動更新。本站為風險資訊參考,非投資建議;實際門檻以主管機關公告為準。</p>
+
+<div class="tiles">
+  <div class="tile rowlink" onclick="showTile('att')"><div class="n" id="t-att">–</div><div class="t">注意股(檔)</div></div>
+  <div class="tile rowlink" onclick="showTile('crit')"><div class="n" id="t-crit">–</div><div class="t">再 1 次注意即處置</div></div>
+  <div class="tile rowlink" onclick="showTile('dis')"><div class="n" id="t-dis">–</div><div class="t">處置中(檔)</div></div>
+  <div class="tile rowlink" onclick="showTile('soon')"><div class="n" id="t-soon">–</div><div class="t">3 天內出關</div></div>
+</div>
+<div id="tilemodal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;max-width:420px;width:92%;max-height:70vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)">
+      <b id="tm-title"></b>
+      <button onclick="document.getElementById('tilemodal').style.display='none'" style="margin-left:auto;border:none;background:none;color:var(--ink3);font-size:1.2rem;cursor:pointer">✕</button>
+    </div>
+    <div id="tm-body" style="overflow-y:auto;padding:8px 16px 14px"></div>
+  </div>
+</div>
+
+<nav class="tabs">
+  <button data-tab="daily" class="on">📰 日報</button>
+  <button data-tab="cal">📅 處置月曆</button>
+  <button data-tab="dis">⛔ 處置公告</button>
+  <button data-tab="exit">🔓 出關時程</button>
+  <button data-tab="att">⚠️ 注意股風險</button>
+  <button data-tab="zj">📝 自結</button>
+  <button data-tab="stock">🔍 個股查詢</button>
+</nav>
+
+<section id="daily" class="on"><div id="daily-list"></div></section>
+
+<section id="cal">
+  <div class="calhead">
+    <button id="cal-prev">‹</button>
+    <h2 id="cal-title"></h2>
+    <button id="cal-next">›</button>
+    <span class="sum" id="cal-sum"></span>
+  </div>
+  <div class="calgrid" id="calgrid"></div>
+  <p class="disclaimer" style="margin-top:8px">格子顯示「該日公告」的處置股(藍=約5分鐘分盤、橘=約20分鐘以上分盤),可回翻一年;點股名看個股詳情。</p>
+</section>
+
+<section id="dis">
+  <div class="filters" id="dis-filters">
+    <button data-f="all" class="on">全部</button>
+    <button data-f="5">5 分盤</button>
+    <button data-f="20">20 分盤+</button>
+    <button data-f="active">處置中</button>
+    <button data-f="上市">上市</button>
+    <button data-f="上櫃">上櫃</button>
+    <input id="dis-q" placeholder="搜尋代號/名稱">
+  </div>
+  <div id="dis-list"></div>
+</section>
+
+<section id="exit"><div id="exit-list"></div></section>
+
+<section id="att"><div id="att-list"></div></section>
+
+<section id="zj"><div id="zj-list"></div></section>
+
+<section id="stock">
+  <div class="searchbar">
+    <input id="q" placeholder="輸入股票代號或名稱,例如 2330" >
+    <button id="go">查詢</button>
+  </div>
+  <div id="stock-result"></div>
+</section>
+
+
+<footer>台股處置雷達 · 資料每交易日約 17:35 / 18:35 (台北時間) 自動更新</footer>
+</div>
+
+<script>
+let D=null, H=null, calYM=null;
+const $=s=>document.querySelector(s);
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const todayISO=()=>new Date().toISOString().slice(0,10);
+
+function fmtMD(iso){return iso?(+iso.slice(5,7))+'/'+(+iso.slice(8,10)):'';}
+function localISO(){const t=new Date();return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');}
+function nd(i){
+  // next_days[0]=資料的下一交易日。盤前/盤中打開(==今天)→「今日」;
+  // 收盤後(==日曆明天)→「明日」;跨週末 →「下一交易日」。
+  const dd=(typeof D!=='undefined'&&D&&D.next_days)?D.next_days:null;
+  if(!dd) return ['今日','明日','後日'][i];
+  const t=new Date(); const tISO=localISO();
+  t.setDate(t.getDate()+1);
+  const tmISO=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  let words;
+  if(dd[0]===tISO) words=['今日','明日','後日'];
+  else if(dd[0]===tmISO) words=['明日','後日','大後日'];
+  else words=['下一交易日','次二日','次三日'];
+  return words[i]+'('+fmtMD(dd[i])+')';
+}
+function riskBadge(m){
+  if(m===null||m===undefined) return '<span class="badge b-good">🟢 不計數(第9款+)</span>';
+  if(m<=0) return '<span class="badge b-critical">⛔ 已達門檻</span>';
+  if(m===1) return '<span class="badge b-critical">🔴 再 1 次即處置</span>';
+  if(m===2) return '<span class="badge b-serious">🟠 再 2 次即處置</span>';
+  if(m===3) return '<span class="badge b-warn">🟡 再 3 次即處置</span>';
+  return '<span class="badge b-good">🟢 觀察中(差 '+m+' 次)</span>';
+}
+function intervalBadge(iv){
+  if(iv==null) return '';
+  return iv<=5 ? '<span class="badge b-5">'+iv+' 分盤</span>'
+               : '<span class="badge b-20">'+iv+' 分盤</span>';
+}
+function pend(d){return d.period_end_real||d.period_end;}
+function countdown(d){
+  const t=todayISO();
+  const pe=pend(d);
+  if(!pe) return '';
+  if(d.period_start && t<d.period_start) return '<span class="badge b-warn">⏳ '+d.period_start.slice(5).replace('-','/')+' 開始</span>';
+  const ex=d.exit_date;
+  if(ex ? t>=ex : t>pe) return '<span class="badge b-good">✅ 已出關</span>';
+  const days=Math.round((new Date(pe)-new Date(t))/864e5)+1;
+  return '<span class="badge '+(days<=3?'b-good':'b-serious')+'">🔓 '+(ex?(fmtMD(ex)+' 出關'):('出關倒數約 '+days+' 天'))+'</span>';
+}
+
+/* ---------- 月曆(資料=一年歷史庫+當日快照) ---------- */
+let CAL=[];
+function buildCalEvents(){
+  CAL=[]; const seen={};
+  for(const d of D.dispositions){
+    if(!d.anndate) continue;
+    seen[d.code+'|'+d.anndate]=1;
+    CAL.push({a:d.anndate,c:d.code,n:d.name,iv:d.interval});
+  }
+  for(const c in H){
+    if(c==='_meta') continue;
+    const dp=H[c].dispositions||{};
+    for(const k in dp){
+      const v=dp[k]; const a=v.anndate||v.period_start;
+      if(!a||seen[c+'|'+a]) continue;
+      seen[c+'|'+a]=1;
+      CAL.push({a,c,n:H[c].name||'',iv:v.interval});
+    }
+  }
+}
+function renderCal(){
+  const [y,m]=calYM;
+  $('#cal-title').textContent=y+' 年 '+m+' 月';
+  const byDay={}; let n5=0,n20=0;
+  for(const d of CAL){
+    const dtp=d.a.split('-');
+    if(+dtp[0]===y && +dtp[1]===m){
+      (byDay[+dtp[2]]=byDay[+dtp[2]]||[]).push(d);
+      if((d.iv||5)<=5) n5++; else n20++;
+    }
+  }
+  $('#cal-sum').textContent='本月公告:5分盤 '+n5+' 檔｜20分盤+ '+n20+' 檔';
+  const first=new Date(y,m-1,1), startDow=first.getDay(), dim=new Date(y,m,0).getDate();
+  let h=['日','一','二','三','四','五','六'].map(x=>'<div class="dow">'+x+'</div>').join('');
+  for(let i=0;i<startDow;i++) h+='<div class="day dim"></div>';
+  const tISO=todayISO();
+  for(let day=1;day<=dim;day++){
+    const iso=y+'-'+String(m).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    h+='<div class="day'+(iso===tISO?' today':'')+'"><div class="dn">'+day+'</div>';
+    for(const d of (byDay[day]||[])){
+      h+='<span class="chip '+((d.iv||5)<=5?'c5':'c20')+'" onclick="openStock(\''+d.c+'\')">'+esc(d.n)+'－'+esc(d.c)+'</span>';
+    }
+    h+='</div>';
+  }
+  // 固定 6 週 42 格,每月同尺寸;格內超出改捲動
+  for(let i=startDow+dim;i<42;i++) h+='<div class="day dim"></div>';
+  $('#calgrid').innerHTML=h;
+}
+function shiftCal(dm){
+  let [y,m]=calYM; m+=dm;
+  if(m<1){m=12;y--;} if(m>12){m=1;y++;}
+  calYM=[y,m]; renderCal();
+}
+function jumpCard(code,ann){
+  switchTab('dis');
+  disFilter='all'; $('#dis-q').value=code; renderDis();
+  setTimeout(()=>{const el=document.getElementById('dc-'+code+'-'+ann); if(el) el.scrollIntoView({behavior:'smooth',block:'center'});},60);
+}
+
+/* ---------- 處置公告 ---------- */
+let disFilter='all';
+function renderDis(){
+  const q=($('#dis-q').value||'').trim().toLowerCase();
+  const t=todayISO();
+  let list=D.dispositions.filter(d=>{
+    if(disFilter==='5'&&(d.interval||5)>5) return false;
+    if(disFilter==='20'&&(d.interval||5)<=5) return false;
+    if(disFilter==='active'&&!(d.period_start<=t&&t<=d.period_end)) return false;
+    if((disFilter==='上市'||disFilter==='上櫃')&&d.market!==disFilter) return false;
+    if(q&&!(d.code.toLowerCase().includes(q)||d.name.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(!list.length){$('#dis-list').innerHTML='<div class="card empty">沒有符合的處置公告</div>';return;}
+  let h='',lastDate='';
+  for(const d of list){
+    if(d.anndate!==lastDate){lastDate=d.anndate;h+='<div class="datehdr">📅 '+esc(d.anndate||'(日期不明)')+' 公告</div>';}
+    h+='<div class="dcard" id="dc-'+d.code+'-'+d.anndate+'">'
+      +'<div class="row1"><span class="nm">'+esc(d.name)+'</span><span class="cd">'+esc(d.code)+'</span>'
+      +'<span class="badge b-mkt">'+esc(d.market)+'</span>'+intervalBadge(d.interval)+countdown(d)+'</div>'
+      +'<div class="period">處置期間:'+esc(d.period_start||'')+' ~ '+esc(d.period_end||d.period_raw)+'</div>'
+      +'<div class="reason">注意累計:'+esc(d.reason)+'</div>'
+      +(d.measure&&d.measure.length>20?'<details><summary>公告全文</summary><div class="full">'+esc(d.measure)+'</div></details>':'')
+      +'</div>';
+  }
+  $('#dis-list').innerHTML=h;
+}
+
+/* ---------- 出關時程 ---------- */
+function exitCard(d){
+  return '<div class="dcard"><div class="row1"><span class="nm">'+esc(d.name)+'</span><span class="cd">'+esc(d.code)+'</span>'
+    +'<span class="badge b-mkt">'+esc(d.market)+'</span>'+intervalBadge(d.interval)+countdown(d)+'</div>'
+    +'<div class="period">公告期間 '+esc(d.period_start||'')+' ~ '+esc(d.period_end||d.period_raw)
+    +(d.period_end_real&&d.period_end_real!==d.period_end?'|實際迄日 <b>'+esc(d.period_end_real)+'</b>(順延)':'')+'</div>'
+    +'<div class="reason">'+esc(d.reason)+'</div></div>';
+}
+function renderExit(){
+  const t=todayISO();
+  const act=(D.exits&&D.exits.length?D.exits:D.dispositions.filter(d=>d.period_start&&pend(d)&&t<=pend(d)))
+    .slice().sort((a,b)=>(a.exit_date||pend(a))<(b.exit_date||pend(b))?-1:1);
+  if(!act.length){$('#exit-list').innerHTML='<div class="card empty">目前沒有處置中的股票</div>';return;}
+  let h='<p class="disclaimer">出關日=實際處置迄日之次一交易日;已依公告之「N個營業日」+實際交易日曆重算颱風/休市順延(例:聯電公告迄日 7/15,因 7/10 休市順延,實際迄日 7/16、7/17 出關)。</p>';
+  let last='';
+  for(const d of act){
+    const ex=d.exit_date||'';
+    if(ex!==last){last=ex;h+='<div class="datehdr">🔓 '+fmtMD(ex)+' 出關</div>';}
+    h+=exitCard(d);
+  }
+  $('#exit-list').innerHTML=h;
+}
+
+/* ---------- 注意股 ---------- */
+function clauseChips(a){
+  if(!a.trig||!a.trig.clauses||!a.trig.clauses.length) return '<span class="crit-text">–</span>';
+  return a.trig.clauses.map(c=>'<span class="badge b-mkt" title="'+esc(a.trig.info)+'">第'+c+'款</span>').join(' ');
+}
+function zjProb(a){
+  // 一年實證(5,041注意日):連3+未公告52%、連2 40%、連1 19%;近30日已公告 4~10%
+  if(a.zjr) return '<span class="badge b-good">低 ~4-10%(近30日已公告)</span>';
+  if((a.zjs||0)>=3) return '<span class="badge b-critical">約 52%(連'+a.zjs+'日)</span>';
+  if(a.zjs===2) return '<span class="badge b-serious">約 40%(連2日)</span>';
+  return '<span class="badge b-warn">約 19%(首日)</span>';
+}
+function condStr(a,forDaily){
+  const an=a.analysis;
+  if(!an) return forDaily?'再中 1 次注意即處置':'–';
+  if(an.certain_hit) return '<b style="color:var(--critical)">一定中注意(漲跌停都閃不過6日累積門檻)</b>';
+  const cs=[];
+  const L=an.limit+0.05;
+  const vmin=Math.min(an.crit_vol||Infinity, an.vol4||Infinity);
+  const which=(an.vol4&&vmin===an.vol4)?'週轉率'+an.to_th+'%':'60日均量×5';
+  const vtxt=vmin<Infinity?'量 <b>'+vmin.toLocaleString()+'</b> 張<span class="crit-text">('+which+')</span>':null;
+  if(!an.exempt1_lowprice){
+    // 漲方向:第一款
+    if(an.crit_pct<=L) cs.push('收盤 <b>'+an.crit_tick+'</b> 以上');
+    // 漲方向:三/四款組合(僅在比第一款便宜時才有意義)
+    if(vtxt&&an.crit34_pct<=L&&an.crit34_tick<an.crit_tick){
+      cs.push(an.crit34_pct<=0.3?vtxt:('收盤 '+an.crit34_tick+' 以上且'+vtxt));
+    }
+    // 第二款(30/60日起迄漲幅)
+    if(an.crit2_pct!==null&&an.crit2_pct!==undefined&&an.crit2_pct<=L&&(!cs.length||an.crit2_tick<an.crit_tick)){
+      cs.push('收盤 <b>'+an.crit2_tick+'</b> 以上<span class="crit-text">(第二款)</span>');
+    }
+    // 跌方向:第一款
+    if(an.crit_dn_pct>=-L) cs.push('收盤 <b>'+an.crit_dn_tick+'</b> 以下<span class="crit-text">(跌)</span>');
+    // 跌方向:三/四款組合
+    if(vtxt&&an.crit34_dn_pct>=-L&&an.crit34_dn_tick>an.crit_dn_tick){
+      cs.push(an.crit34_dn_pct>=-0.3?vtxt:('收盤 '+an.crit34_dn_tick+' 以下(跌)且'+vtxt));
+    }
+  }
+  if(!cs.length) return '🚫 價量'+nd(0)+'皆難達(券商比等其他款仍可能)';
+  return cs.join(' 或 ');
+}
+function renderAtt(){
+  if(!D.attention.length){$('#att-list').innerHTML='<div class="card empty">目前沒有注意股 🎉</div>';return;}
+  let h='<div class="card"><table><thead><tr><th>代號</th><th>名稱</th><th>市場</th><th>處置風險</th><th>今日觸發款別</th><th>'+nd(0)+'觸發條件</th><th>注意紀錄</th></tr></thead><tbody>';
+  for(const a of D.attention){
+    const _dp=inOrPendingDisp(a.code);
+    h+='<tr class="rowlink" onclick="openStock(\''+a.code+'\')"><td class="code">'+esc(a.code)+'</td><td>'+esc(a.name)+'</td>'
+      +'<td class="crit-text">'+esc(a.market)+'</td><td>'+riskBadge(a.min_days)+(_dp?' <span class="badge b-critical">處置中</span>':'')+'</td>'
+      +'<td>'+clauseChips(a)+'</td>'
+      +'<td>'+condStr(a)+'</td>'
+      +'<td class="crit-text">'+esc(a.text)+'</td></tr>';
+  }
+  h+='</tbody></table></div><p class="disclaimer">「處置風險」= 依目前連續/累積次數,最少再被列幾次注意就會處置。「觸發條件」= 達任一條件即可能再中注意(價=第一款貼齊檔位、量=60日均量×5 估;週轉率等其他款另計)。點列看個股完整分析。</p>';
+  $('#att-list').innerHTML=h;
+}
+
+/* ---------- 個股查詢 ---------- */
+function bufHtml(buffers,minDays){
+  const denom={'連續3次(第一款,最快)':3,'連續5次(綜合)':5,'最近10日內6次':6,'最近30日內12次':12};
+  let h='';
+  for(const k in buffers){
+    const left=buffers[k],total=denom[k]||5,done=Math.max(0,total-left);
+    const pct=Math.min(100,Math.round(done/total*100));
+    const col=left<=1?'var(--critical)':(left<=2?'var(--serious)':'var(--warn)');
+    h+='<div class="bufline"><span class="bufbar"><i style="width:'+pct+'%;background:'+col+'"></i></span>'
+      +esc(k)+':已 '+done+'/'+total+',還差 <b>'+left+'</b> 次'+(left===minDays?' ← 最快':'')+'</div>';
+  }
+  return h;
+}
+function findStock(q){
+  q=q.trim().toLowerCase(); if(!q) return null;
+  let code=null,name='',market='';
+  const S=D.stocks||{};
+  if(S[q]){code=q;}
+  else{
+    for(const c in S){if((S[c][0]||'').toLowerCase()===q){code=c;break;}}
+    if(!code){for(const c in S){if((S[c][0]||'').toLowerCase().includes(q)){code=c;break;}}}
+  }
+  if(!code){
+    if(/^\d{4,6}$/.test(q)&&H[q])code=q;
+    else{for(const c in H){if((H[c].name||'').toLowerCase().includes(q)){code=c;break;}}}
+  }
+  if(!code) return null;
+  if(S[code]){name=S[code][0];market=S[code][1];}
+  else if(H[code])name=H[code].name||'';
+  const att=D.attention.find(a=>a.code===code)||null;
+  const dis=D.dispositions.filter(d=>d.code===code);
+  if(att&&!name)name=att.name;
+  return {code,name,market,att,dis,hist:H[code]||null};
+}
+function openStock(q){
+  switchTab('stock'); $('#q').value=q; renderStock(findStock(q),q);
+}
+function renderStock(s,q){
+  if(!s){$('#stock-result').innerHTML='<div class="card empty">找不到「'+esc(q)+'」。可輸入代號(如 2330)或名稱。</div>';return;}
+  const t=todayISO();
+  const activeDis=s.dis.filter(d=>d.period_start<=t&&t<=pend(d));
+  const upcoming=s.dis.filter(d=>d.period_start&&d.period_start>t);
+  const exrec=(D.exits||[]).find(e=>e.code===s.code&&t<e.exit_date)||null;
+  let h='<div class="card"><h2>'+esc(s.code)+' '+esc(s.name||'')
+    +(s.market?' <span class="badge b-mkt">'+esc(s.market)+'</span>':'')+'</h2>';
+  if(activeDis.length){
+    h+='<p class="kv"><span class="badge b-critical">⛔ 處置中</span> '+countdown(activeDis[0])+'</p>';
+  }else if(upcoming.length){
+    h+='<p class="kv"><span class="badge b-critical">⏳ 即將處置('+esc(upcoming[0].period_start)+' 起)</span></p>';
+  }else if(s.att){
+    h+='<p class="kv"><span class="badge b-serious">⚠️ 被列注意(尚未處置)</span></p>';
+  }else{
+    h+='<p class="kv"><span class="badge b-good">✅ 目前不在注意/處置清單</span></p>';
+  }
+  for(const d of s.dis){
+    h+='<p class="kv"><b>'+esc(d.anndate)+' 公告</b> '+intervalBadge(d.interval)+' 期間 '+esc(d.period_start||'')+' ~ '+esc(d.period_end||'')+'<br>'
+      +'<span class="crit-text">'+esc(d.reason)+'</span></p>';
+  }
+  if(s.att){
+    h+='<p class="kv"><b>注意內容</b>:'+esc(s.att.text)+'</p><p class="kv">'+riskBadge(s.att.min_days)+'</p>'
+      +(s.att.min_days===null
+        ?'<p class="kv">🟢 本次觸發款別(第9款以後)不計入處置計數,不會因此被處置。</p>'
+        :(s.att.min_days>0
+          ?'<p class="kv">最快情境:接下來再被列注意 <b>'+s.att.min_days+'</b> 次即觸發處置。</p>'
+          :'<p class="kv">已達處置門檻,次一交易日起很可能公告處置。</p>'))
+      +'<h3>各門檻進度</h3>'+bufHtml(s.att.buffers,s.att.min_days);
+    let lt=null,ltDate='';
+    if(s.hist&&s.hist.attention){
+      const ds=Object.keys(s.hist.attention).sort();
+      for(let i=ds.length-1;i>=0;i--){
+        const e=s.hist.attention[ds[i]];
+        if(e&&typeof e==='object'&&e.trig){lt=e;ltDate=ds[i];break;}
+      }
+    }
+    if(!lt&&s.att.trig){lt={trig:s.att.trig.info,clauses:s.att.trig.clauses,close:s.att.trig.close};ltDate=s.att.trig.date;}
+    if(lt){
+      h+='<h3>最新觸發明細('+esc(ltDate)+')</h3><p class="kv">'
+        +(lt.clauses||[]).map(c=>'<span class="badge b-mkt">第'+c+'款</span>').join(' ')
+        +(lt.close?' 收盤 '+esc(lt.close):'')+'</p>'
+        +'<p class="crit-text">'+esc(lt.trig)+'</p>';
+    }
+  }
+  // 明日情境 + 生存分析
+  h+='<h3>明日情境</h3>';
+  const an=(D.analysis&&D.analysis[s.code])||(s.att&&s.att.analysis)||null;
+  if(an){
+    const md=s.att?s.att.min_days:null;
+    const todayC=an.close;
+    const pct=an.crit_pct.toFixed(1);
+    const p11=an.crit11_pct.toFixed(1);
+    const r1=an.crit_pct<=an.limit+0.05, r11=an.crit11_pct<=an.limit+0.05;
+    const disposeNow=(md!==null&&md<=1)||an.k10_if_hit>=6;
+    h+='<div class="anal">'
+      +(an.certain_hit?'<p>⛔ <b>鎖死</b>:'+nd(0)+'無論收在哪裡(含跌停),6日累積漲跌幅都超標 → 必中第一款注意</p>':'')
+      +(an.exempt1_lowprice
+        ?'<p>💰 <b>價(第一款)</b>:🟢 收盤未滿 5 元 → 第一款不適用(除外情形)</p>'
+        :(r1
+          ?'<p>💰 <b>價(第一款,計數)</b>:'+nd(0)+'收盤 <span class="hl">≥ '+an.crit.toFixed(2)+' 元</span>(較今收 '+todayC+' 約 '+(pct>0?'+':'')+pct+'%,'+esc(an.crit_branch)+' 分支)→ 中注意</p>'
+          :'<p>💰 <b>價(第一款,計數)</b>:🚫 <b>'+nd(0)+'不可能觸發</b> — 臨界價 '+an.crit.toFixed(2)+' 需 +'+pct+'%,超過漲停 '+an.limit+'%(平盤假設下,'+nd(1)+'臨界 '+an.flat_crits[1].toFixed(2)+'、'+nd(2)+' '+an.flat_crits[2].toFixed(2)+')</p>'))
+      +((an.crit2_pct!==null&&an.crit2_pct!==undefined&&an.crit2_pct<=an.limit+0.05)
+        ?'<p>📈 <b>價(第二款,計數)</b>:'+nd(0)+'收盤 <span class="hl">≥ '+an.crit2_tick+'</span>('+(an.crit2_pct>0?'+':'')+an.crit2_pct.toFixed(1)+'%)→ 中注意(30/60日起迄漲幅)</p>':'')
+      +'<p>📏 <b>價差(第十一款,不計數)</b>:'+(an.exempt11
+          ?'近5日內已中第十一款 → <b>'+nd(0)+'豁免</b>'
+          :(r11
+            ?nd(0)+'收盤 ≥ '+an.crit11.toFixed(2)+' 元('+(p11>0?'+':'')+p11+'%)且為6日最高 → 中注意(不入處置計數)'
+            :'🚫 '+nd(0)+'不可能(臨界價 '+an.crit11.toFixed(2)+' 需 +'+p11+'%,超過漲停 '+an.limit+'%)'))+'</p>'
+      +((an.crit_vol||an.vol4)&&an.crit34_pct<=an.limit+0.05
+        ?'<p>📊 <b>量/週轉率(第三/四款,計數)</b>:'+nd(0)+' 收盤 ≥ '+an.crit34_tick+'(6日累積達 '+an.th34+'%)且 '
+          +[an.crit_vol?'量 ≥ <b>'+an.crit_vol.toLocaleString()+'</b> 張(60日均量×5)':null,
+            an.vol4?'量 ≥ <b>'+an.vol4.toLocaleString()+'</b> 張(週轉率 '+an.to_th+'%)':null].filter(Boolean).join(' 或 ')
+          +' → 中注意</p>'
+        :'')
+      +'<p>'+(disposeNow
+        ?'⛔ <b>中計數款注意 → 處置</b>(分盤撮合+預收款券)'
+        :(md!==null
+          ?'⚠️ 中計數款(1~8款)注意 → 距處置剩 <b>'+(md-1)+'</b> 次'+(an.streak1>=1?'(現連續第一款 '+an.streak1+' 日,連3日即處置)':'')
+          :(s.att?'🟢 目前僅第9款以後注意,不累積處置計數':'目前不在注意名單')))
+      +'</p>'
+      +(an.second_next?'<p>⛔ <b>30日內曾處置</b> → 若再觸發處置為<b>第二次</b>:約每20分鐘分盤、所有委託全面預收款券</p>':'')
+      +'</div>'
+      +'<h3>躲關 / 被關試算</h3><div class="anal">'
+      +'<p>🛡️ <b>躲關</b>:'+nd(0)+'收盤壓在 <b>'+an.crit.toFixed(2)+'</b> 以下不中第一款;'
+      +'假設之後平盤,臨界價 '+nd(0)+' <b>'+an.flat_crits[0].toFixed(2)+'</b> → '+nd(1)+' <b>'+an.flat_crits[1].toFixed(2)+'</b> → '+nd(2)+' <b>'+an.flat_crits[2].toFixed(2)+'</b>(越高=越安全)</p>'
+      +'<p>💚 <b>安全天數</b>:'+(an.safe_days>=10?'<b>10+ 天</b>':'<b>'+an.safe_days+'</b> 個交易日')
+      +' — 這段期間內即使單日再中 1 次計數款注意,也不會觸發處置(10日窗現 '+an.k10+'/6、30日窗 '+an.k30+'/12,若都不中:'+an.decay.join('→')+')</p>'
+      +((activeDis.length||upcoming.length||exrec)
+        ?('<p>🔓 <b>出關</b>:'+(exrec&&exrec.exit_date
+             ?fmtMD(exrec.exit_date)+' 出關(實際迄日 '+esc(exrec.period_end_real||exrec.period_end||'')+')'
+             :'處置中,期間見上方')+'</p>'
+          +'<p>⚡ <b>處置中加重風險</b>:處置期間再中計數款注意照樣計數,可能公告第二次/延長處置(20分鐘分盤,統懋 7/17 案例)'
+          +(an.fastest?';若天天漲停最快 <b>'+an.fastest+'</b> 個交易日':'')+'</p>')
+        :('<p>⚡ <b>最快被關</b>:'+(an.fastest
+            ?'若'+nd(0)+'起天天漲停(+'+an.limit+'%)→ 最快 <b>'+an.fastest+'</b> 個交易日後處置'
+            :'即使天天漲停,模擬 20 個交易日內也達不到處置條件')
+          +(an.fastest&&an.second_next?'(且為第二次處置,20分鐘分盤)':'')+'</p>'))
+      +'</div>'
+      +'<h3>逐日明細(近 15 個交易日)</h3>'
+      +'<table class="mini"><thead><tr><th>日期</th><th>收盤</th><th>漲跌%</th><th>6日累積%</th><th>注意</th></tr></thead><tbody>';
+    for(const r of an.day_rows){
+      const cl=r[4]&&r[4].length?r[4].map(c=>'第'+c+'款').join('、'):'';
+      const style=cl?' style="background:var(--warn-bg)"':'';
+      h+='<tr'+style+'><td>'+esc(r[0].slice(5))+'</td><td>'+r[1]+'</td><td>'+(r[2]>0?'+':'')+r[2]+'</td><td>'+(r[3]>0?'+':'')+r[3]+'</td>'
+        +'<td class="crit-text">'+(cl?'⚠️ '+cl:'')+(r[5]?' <span class="badge b-critical">處置中</span>':'')+'</td></tr>';
+    }
+    h+='</tbody></table>'
+      +'<p class="crit-text" style="margin-top:6px">今日 6 日累積漲跌幅 '+an.cum6+'%(門檻 '+an.th_hi+'% 或 '+an.th_lo+'%+價差'+an.th_diff+'元)、起迄價差 '+an.diff6+' 元、成交量 '+an.vol_today.toLocaleString()+' 張</p>'
+      +'<p class="disclaimer">門檻依交易所「第四條詳細數據」原文(上市32%/25%+50元、上櫃30%/23%+40元;第十一款上市100元/500元級距+25、上櫃70元/300元級距+15);第一款另須與大盤/同類差幅≥20%(飆股通常成立,未列入計算)。連3日處置通道只認第一款;計數器只計第1~8款;處置期間之注意不計數。量門檻為估算;平盤假設僅供參考,實際臨界價隨每日收盤變動。</p>';
+  }else if(s.att){
+    h+='<p class="kv">'
+      +(s.att.min_days<=1
+        ?'⛔ <b>明日再被公布注意(任一款)即處置</b>(分盤撮合+預收款券)。'
+        :'⚠️ 明日再被公布注意 → 距處置剩 <b>'+(s.att.min_days-1)+'</b> 次。')
+      +(s.att.market==='興櫃'?'(興櫃連續3日注意即處置,無價格分析)':'(價格資料不足,無臨界價)')+'</p>';
+  }else{
+    h+='<p class="kv">目前不在注意名單。主要注意條件:6日累積漲跌幅(上市32%/上櫃25%)、6日起迄價差、'
+      +'量>60日均量約5倍、週轉率、本益比/淨值比異常、券商集中、當沖比。</p>';
+  }
+  h+='</div>';
+
+  // 自結歷史
+  const zj=s.hist&&s.hist.zijie?Object.keys(s.hist.zijie).sort().reverse():[];
+  h+='<div class="card"><h2>自結歷史</h2>';
+  if(zj.length){
+    h+='<table><thead><tr><th>日期</th><th>類型</th><th>內容</th></tr></thead><tbody>';
+    for(const d of zj.slice(0,24)){
+      const e=s.hist.zijie[d];
+      const isO=e&&typeof e==='object';
+      const kind=isO&&e.k==='forced'?'<span class="badge b-serious">達注意標準</span>':'<span class="badge b-mkt">自結</span>';
+      let body=isO?(finHtml(e.f)+'<span class="crit-text">'+esc(e.s)+'</span>'):esc(String(e||''));
+      h+='<tr><td class="crit-text" style="white-space:nowrap">'+esc(d)+'</td><td>'+kind+'</td><td class="crit-text">'+body+'</td></tr>';
+    }
+    h+='</tbody></table>';
+  }else{
+    h+='<p class="kv">尚無自結公告紀錄(每日自動從重大訊息累積;歷史自啟用日起算)。</p>';
+  }
+  h+='</div>';
+
+  h+='<div class="card"><h2>歷史紀錄</h2>';
+  if(!s.hist){h+='<p class="kv">本站資料庫尚無此檔歷史(自動更新啟用後會逐日累積)。</p>';}
+  else{
+    const evKeys=Object.keys(s.hist.dispositions||{});
+    if(evKeys.length){
+      h+='<h3>處置事件</h3><table><thead><tr><th>期間</th><th>分盤</th><th>原因</th></tr></thead><tbody>';
+      for(const k of evKeys){
+        const e=s.hist.dispositions[k];
+        h+='<tr><td class="crit-text">'+esc(e.period_start||'')+' ~ '+esc(e.period_end||k)+'</td>'
+          +'<td>'+intervalBadge(e.interval)+'</td><td class="crit-text">'+esc(e.reason)+'</td></tr>';
+      }
+      h+='</tbody></table>';
+    }else h+='<p class="kv">處置事件:無</p>';
+  }
+  h+='</div>';
+
+  // 注意公告時間軸
+  const days=s.hist?Object.keys(s.hist.attention||{}).sort().reverse():[];
+  h+='<div class="card"><h2>注意公告時間軸</h2>';
+  if(days.length){
+    h+='<p class="kv">累計 <b>'+days.length+'</b> 次注意公告 <span class="crit-text">最近公告日 '+esc(days[0].replace(/-/g,'/'))+'</span></p><div class="tl">';
+    for(const d of days.slice(0,40)){
+      const e=s.hist.attention[d];
+      const isObj=e&&typeof e==='object';
+      const txt=isObj?(e.trig||e.cum||''):String(e||'');
+      const cl=isObj&&e.clauses&&e.clauses.length?e.clauses.map(c=>'第'+c+'款').join('、'):'';
+      const tg=tagsFromText(txt);
+      h+='<div class="tl-row"><div class="tl-date">'+esc(d.replace(/-/g,'/'))+'</div><div class="tl-card">'
+        +'<div class="row1"><span class="nm">'+esc(s.name||'')+'</span><span class="cd">'+esc(s.code)+'</span>'
+        +(tg.length?'<span class="tags">'+tg.join('｜')+'</span>':'')
+        +(cl?'<span class="badge b-mkt" style="margin-left:auto">'+esc(cl)+'</span>':'')
+        +(isObj&&e.close?'<span class="crit-text">收盤 '+esc(e.close)+'</span>':'')
+        +'</div>'
+        +(txt?'<div class="crit-text">'+esc(txt)+'</div>':'')
+        +'</div></div>';
+    }
+    h+='</div>';
+    if(days.length>40)h+='<p class="disclaimer">僅顯示最近 40 筆。</p>';
+  }else{
+    h+='<p class="kv">近 45 天內無注意公告紀錄。</p>';
+  }
+  h+='</div>';
+  $('#stock-result').innerHTML=h;
+}
+function finHtml(f){
+  if(!f||!f.length) return '';
+  let h='<div style="margin:5px 0 3px">';
+  for(const x of f){
+    if(typeof x==='string'){h+='<div class="tags">'+esc(x)+'</div>';continue;}
+    h+='<div style="font-size:.95rem;margin:2px 0"><b>'+esc(x.l)+' EPS '+esc(x.eps)+' 元</b>';
+    if(x.yoy!==null&&x.yoy!==undefined&&x.yoy!==''){
+      const v=parseFloat(x.yoy);
+      h+=isNaN(v)
+        ?' <span style="font-weight:650;color:var(--warn)">'+esc(x.yoy)+'</span>'
+        :' <span style="font-weight:650;color:'+(v>=0?'var(--critical)':'var(--good)')+'">YoY '+(v>=0?'▲':'▼')+Math.abs(v).toLocaleString()+'%</span>';
+    }
+    h+='</div>';
+  }
+  return h+'</div>';
+}
+function tagsFromText(t){
+  const map=[['漲跌幅',/漲幅|跌幅/],['價差',/價差/],['成交量',/成交量/],['周轉率',/週轉率/],
+             ['券商比',/券商/],['本益比',/本益比|淨值比/],['當沖',/當日沖銷|當沖/],['券資比',/券資/]];
+  return map.filter(m=>m[1].test(t||'')).map(m=>m[0]);
+}
+
+/* ---------- 共用 ---------- */
+function switchTab(id){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===id));
+  document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===id));
+}
+document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+document.querySelectorAll('#dis-filters button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#dis-filters button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); disFilter=b.dataset.f; renderDis();
+});
+$('#dis-q').addEventListener('input',renderDis);
+$('#go').onclick=()=>renderStock(findStock($('#q').value),$('#q').value);
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter')$('#go').click()});
+$('#cal-prev').onclick=()=>shiftCal(-1);
+$('#cal-next').onclick=()=>shiftCal(1);
+
+async function decryptB64(b64,pw){
+  const raw=Uint8Array.from(atob(b64.trim()),c=>c.charCodeAt(0));
+  const salt=raw.slice(0,16),iv=raw.slice(16,28),ct=raw.slice(28);
+  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function loadJSON(name,pw){
+  const bust='?t='+Date.now();
+  const r=await fetch(name+'.enc'+bust);
+  if(r.ok){
+    const b64=await r.text();
+    if(b64.length>50&&b64.indexOf('<')<0) return decryptB64(b64,pw);
+  }
+  const r2=await fetch(name+bust);
+  if(!r2.ok) throw new Error('no data');
+  return r2.json();
+}
+function showGate(err){
+  const g=document.getElementById('pwgate');
+  g.style.display='flex';
+  document.getElementById('pw-err').style.display=err?'block':'none';
+  document.getElementById('pw-in').focus();
+}
+async function boot(pw){
+  pw=pw||localStorage.getItem('tdr_pw')||'';
+  let d,hh;
+  try{
+    [d,hh]=await Promise.all([loadJSON('data.json',pw),
+                              loadJSON('history.json',pw).catch(()=>({}))]);
+  }catch(e){
+    localStorage.removeItem('tdr_pw');
+    showGate(!!pw); return;
+  }
+  if(pw) localStorage.setItem('tdr_pw',pw);
+  document.getElementById('pwgate').style.display='none';
+  D=d; H=hh||{};
+  $('#updated').textContent='資料更新 '+D.updated_at;
+  $('#t-att').textContent=D.attention.length;
+  $('#t-crit').textContent=D.attention.filter(a=>a.min_days!==null&&a.min_days<=1).length;
+  const t=todayISO();
+  const exsrc=(D.exits&&D.exits.length)?D.exits:D.dispositions;
+  const act=exsrc.filter(x=>x.period_start<=t&&(x.exit_date?t<x.exit_date:t<=pend(x)));
+  $('#t-dis').textContent=act.length;
+  $('#t-soon').textContent=act.filter(x=>{const e=x.exit_date||pend(x);return Math.round((new Date(e)-new Date(t))/864e5)<=3;}).length;
+  const now=new Date(); calYM=[now.getFullYear(),now.getMonth()+1];
+  // 全站搜尋建議清單(全市場)
+  const S=D.stocks||{}, opts=[];
+  for(const c in S) opts.push(c+' '+S[c][0]);
+  $('#allstocks').innerHTML=opts.map(o=>'<option value="'+esc(o)+'">').join('');
+  buildCalEvents();
+  renderDaily(); renderCal(); renderDis(); renderExit(); renderAtt(); renderZj();
+}
+function inOrPendingDisp(code){
+  const t=todayISO();
+  return (D.exits||[]).find(e=>e.code===code&&((e.period_start<=t&&t<e.exit_date)||e.period_start>t))||null;
+}
+function renderDaily(){
+  const monthAgo=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const danger=D.attention.filter(a=>a.min_days!==null&&a.min_days<=1);
+  const g5=[],g20=[],gIn=[];
+  // 候選來源:引擎全市場掃描(D.danger);舊資料無此欄時退回注意名單推導
+  const src=(D.danger&&D.danger.length!==undefined)
+    ?D.danger.map(x=>({code:x.code,name:x.name,market:x.market,min_days:1,
+                       analysis:(D.analysis||{})[x.code]||null,
+                       _second:x.second,_certain:x.certain}))
+    :danger.map(a=>({code:a.code,name:a.name,market:a.market,min_days:a.min_days,
+                     analysis:a.analysis,_second:a.analysis&&a.analysis.second_next,
+                     _certain:a.min_days<=0||(a.analysis&&a.analysis.certain_hit)}));
+  for(const a of src){
+    const cond=a._certain?'<b style="color:var(--critical)">一定處置</b>':condStr(a,true);
+    const dp=inOrPendingDisp(a.code);
+    if(dp){gIn.push({a,cond,dp});continue;}
+    (a._second?g20:g5).push({a,cond});
+  }
+  const line=x=>'<div class="rowlink" style="padding:7px 4px;border-bottom:1px solid var(--line);font-size:.98rem" onclick="openStock(\''+x.a.code+'\')">'
+    +'<span class="code">'+esc(x.a.code)+'</span> <b>'+esc(x.a.name)+'</b>'
+    +'<span class="crit-text" style="margin-left:6px">('+esc(x.a.market)+')</span>:'+x.cond+'</div>';
+  let h='<div class="card"><h2>📰 '+nd(0)+' 處置雷達日報</h2>'
+    +'<p class="disclaimer">再中 1 次計數款注意即處置的股票與其觸發條件。價=第一款(漲跌雙向);量=第三款(60日均量×5)/第四款(週轉率)之較低者,官方規定量須<b>同時</b>達 25%/27% 漲跌幅價位——若該價位已高於第一款臨界,量不會更早觸發,故不列;券商集中(第五款)無法預算。點列看完整分析。</p>'
+    +'<h3>⚡ 5 分盤處置候選(第一次處置)</h3>'
+    +(g5.length?g5.map(line).join(''):'<p class="kv">無</p>')
+    +'<h3 style="margin-top:16px">🔥 20 分盤處置候選(30日內曾處置 → 第二次)</h3>'
+    +(g20.length?g20.map(line).join(''):'<p class="kv">無</p>')
+    +(gIn.length?'<h3 style="margin-top:16px">⚙️ 處置中/已公告處置,又達標(加重/延長風險,非新候選)</h3>'
+      +gIn.map(x=>'<div class="rowlink" style="padding:7px 4px;border-bottom:1px solid var(--line);font-size:.98rem" onclick="tmGo(\''+x.a.code+'\')">'
+        +'<span class="code">'+esc(x.a.code)+'</span> <b>'+esc(x.a.name)+'</b>'
+        +'<span class="crit-text" style="margin-left:6px">('+esc(x.a.market)+')</span> '
+        +'<span class="badge b-critical">'+(x.dp.period_start>todayISO()?fmtMD(x.dp.period_start)+' 起處置':'處置中,'+fmtMD(x.dp.exit_date)+' 出關')+'</span>'
+        +'<span class="crit-text" style="margin-left:6px">:'+x.cond+'</span></div>').join(''):'')
+    +'</div>';
+  // 盤後可能公布自結
+  const att=D.attention.filter(a=>a.trig&&a.min_days!==null);
+  h+='<div class="card"><h2>⏳ 盤後可能公布自結</h2>';
+  if(att.length){
+    h+=att.map(a=>{
+      return '<div class="rowlink" style="padding:6px 4px;border-bottom:1px solid var(--line)" onclick="openStock(\''+a.code+'\')">'
+        +'<span class="code">'+esc(a.code)+'</span> <b>'+esc(a.name)+'</b> '+zjProb(a)+'</div>';
+    }).join('');
+  }else h+='<p class="kv">今日無新中注意股票</p>';
+  h+='</div>';
+  // 前一日公布自結(達注意標準的財務資訊)
+  const forced=(D.zijie||[]).filter(z=>z.kind==='forced');
+  h+='<div class="card"><h2>📝 最新公布自結(達注意標準)</h2>';
+  if(forced.length){
+    h+=forced.map(z=>{
+      let eps='';
+      if(z.fin&&z.fin.length){const f=z.fin[0];eps=':'+esc(f.l)+' EPS <b>'+esc(f.eps)+'</b>'+(f.yoy?'(YoY '+(parseFloat(f.yoy)>=0?'▲':'▼')+Math.abs(parseFloat(f.yoy))+'%)':'');}
+      return '<div class="rowlink" style="padding:6px 4px;border-bottom:1px solid var(--line)" onclick="openStock(\''+z.code+'\')">'
+        +'<span class="code">'+esc(z.code)+'</span> <b>'+esc(z.name)+'</b><span class="crit-text" style="margin-left:6px">'+esc(z.date)+'</span>'+eps+'</div>';
+    }).join('');
+  }else h+='<p class="kv">無</p>';
+  h+='</div>';
+  $('#daily-list').innerHTML=h;
+}
+function renderZj(){
+  let h='';
+  const zj=D.zijie||[];
+  const forced=zj.filter(z=>z.kind==='forced'), vol=zj.filter(z=>z.kind!=='forced');
+  h+='<div class="card"><h2>⚠️ 達注意/處置標準 → 被要求公告的財務資訊</h2>'
+    +'<p class="disclaimer">公司有價證券達公布注意交易資訊標準時,交易所可要求公告最近月自結損益、每股淨值等(重訊第51/53款)。</p>';
+  if(forced.length){
+    for(const z of forced){
+      h+='<div class="dcard"><div class="row1">'
+        +'<span class="nm rowlink" onclick="openStock(\''+z.code+'\')">'+esc(z.name)+'</span><span class="cd">'+esc(z.code)+'</span>'
+        +'<span class="badge b-mkt">'+esc(z.market)+'</span><span class="crit-text">'+esc(z.date)+'</span></div>';
+      h+=finHtml(z.fin)
+        +'<div class="reason">'+esc(z.subject)+'</div></div>';
+    }
+  }else h+='<p class="kv">今日沒有此類公告。</p>';
+  h+='</div>';
+
+  h+='<div class="card"><h2>📝 一般自結公告(自願性/例行)</h2>';
+  if(vol.length){
+    h+='<table><thead><tr><th>日期</th><th>代號</th><th>名稱</th><th>市場</th><th>主旨</th></tr></thead><tbody>';
+    for(const z of vol){
+      h+='<tr class="rowlink" onclick="openStock(\''+z.code+'\')"><td class="crit-text" style="white-space:nowrap">'+esc(z.date)+'</td>'
+        +'<td class="code">'+esc(z.code)+'</td><td>'+esc(z.name)+'</td><td class="crit-text">'+esc(z.market)+'</td>'
+        +'<td class="crit-text">'+esc(z.subject)+'</td></tr>';
+    }
+    h+='</tbody></table>';
+  }else h+='<p class="kv">今日沒有一般自結公告。</p>';
+  h+='</div>';
+
+  h+='<div class="card"><h2>⏳ 明日開盤前可能公布自結的候選</h2>'
+    +'<p class="disclaimer">機率為一年實證統計(5,041 個注意日):連續3日以上中注意且近30日未公告 → 52% 隔日被要求公告;連2日 40%、首日 19%;近30日已公告過者僅 4~10%。規則出處:交易所依重大訊息處理程序(上市51款/上櫃53款)通知公司於次一營業日開盤前公告自結損益等。</p>';
+  const monthAgo=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+  const att=D.attention.filter(a=>a.trig&&a.min_days!==null);
+  if(att.length){
+    h+='<table><thead><tr><th>代號</th><th>名稱</th><th>市場</th><th>今日觸發款別</th><th>公布自結機率</th></tr></thead><tbody>';
+    for(const a of att){
+      h+='<tr class="rowlink" onclick="openStock(\''+a.code+'\')"><td class="code">'+esc(a.code)+'</td><td>'+esc(a.name)+'</td>'
+        +'<td class="crit-text">'+esc(a.market)+'</td><td>'+clauseChips(a)+'</td><td>'+zjProb(a)+'</td></tr>';
+    }
+    h+='</tbody></table>';
+  }else h+='<p class="kv">今日沒有中計數款注意的股票。</p>';
+  h+='</div>';
+  $('#zj-list').innerHTML=h;
+}
+function showTile(kind){
+  const t=todayISO();
+  const exsrc=(D.exits&&D.exits.length)?D.exits:D.dispositions;
+  const act=exsrc.filter(x=>x.period_start<=t&&(x.exit_date?t<x.exit_date:t<=pend(x)));
+  let title='',rows=[];
+  if(kind==='att'){title='注意股';rows=D.attention.map(a=>[a.code,a.name,riskBadge(a.min_days)]);}
+  else if(kind==='crit'){title='再 1 次注意即處置';rows=D.attention.filter(a=>a.min_days!==null&&a.min_days<=1).map(a=>[a.code,a.name,riskBadge(a.min_days)]);}
+  else if(kind==='dis'){title='處置中';rows=act.map(x=>[x.code,x.name,'<span class="badge b-mkt">'+fmtMD(x.exit_date||pend(x))+' 出關</span>']);}
+  else{title='3 天內出關';rows=act.filter(x=>{const e=x.exit_date||pend(x);return Math.round((new Date(e)-new Date(t))/864e5)<=3;}).map(x=>[x.code,x.name,'<span class="badge b-good">'+fmtMD(x.exit_date||pend(x))+' 出關</span>']);}
+  document.getElementById('tm-title').textContent=title+'('+rows.length+' 檔)';
+  document.getElementById('tm-body').innerHTML=rows.length
+    ?rows.map(r=>'<div class="rowlink" style="padding:7px 2px;border-bottom:1px solid var(--line)" onclick="tmGo(\''+r[0]+'\')"><span class="code">'+esc(r[0])+'</span> '+esc(r[1])+' <span style="float:right">'+r[2]+'</span></div>').join('')
+    :'<p class="kv">無</p>';
+  document.getElementById('tilemodal').style.display='flex';
+}
+function tmGo(c){
+  document.getElementById('tilemodal').style.display='none';
+  openStock(c);
+}
+function gqGo(){
+  const v=$('#gq').value.trim(); if(!v)return;
+  const code=(v.match(/^\S+/)||[''])[0];
+  openStock(code); $('#gq').value='';
+}
+$('#gq').addEventListener('change',gqGo);
+$('#gq').addEventListener('keydown',e=>{if(e.key==='Enter')gqGo()});
+$('#pw-go').onclick=()=>boot($('#pw-in').value);
+$('#pw-in').addEventListener('keydown',e=>{if(e.key==='Enter')boot($('#pw-in').value)});
+boot();
+</script>
+</body>
+</html>
