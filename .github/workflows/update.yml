@@ -1,0 +1,49 @@
+name: 更新注意/處置資料
+
+on:
+  schedule:
+    # 台北時間 17:35 與 18:35(UTC+8),平日。TWSE/TPEx 公告多在收盤後更新。
+    - cron: "35 9 * * 1-5"
+    - cron: "35 10 * * 1-5"
+    # 台北 08:10(平日):補收前晚深夜/清晨的自結與重訊
+    - cron: "10 0 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安裝相依套件
+        run: pip install cryptography
+
+      - name: 抓取最新資料
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: python fetch_data.py
+
+      - name: Commit 更新
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data.json.enc docs/history.json.enc docs/prices.json.enc
+          if git diff --cached --quiet; then
+            echo "資料無變動,略過 commit"
+          else
+            # 資料檔很大:若上一個 commit 也是資料更新,用 amend 覆蓋,避免 repo 無限膨脹
+            if git log -1 --pretty=%s | grep -q '^data:'; then
+              git commit --amend -m "data: $(date +'%Y-%m-%d %H:%M') 自動更新"
+              git push --force-with-lease
+            else
+              git commit -m "data: $(date +'%Y-%m-%d %H:%M') 自動更新"
+              git push
+            fi
+          fi
