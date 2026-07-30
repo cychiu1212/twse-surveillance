@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+surveillance.db
+site_password.txt
+docs/data.json
+docs/history.json
+docs/prices.json
